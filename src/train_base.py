@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 from model import TinyModel
@@ -16,11 +17,14 @@ inputs = torch.tensor([char_to_idx[c] for c in text[:-1]])
 targets = torch.tensor([char_to_idx[c] for c in text[1:]])
 
 # --- model ---
-model = TinyModel(vocab_size, hidden_dim=8)
+model = TinyModel(vocab_size, hidden_dim=2)
+
+# 学習前保存
+initial_embedding = copy.deepcopy(model.embedding.weight.data)
 
 # embedding凍結
-for param in model.embedding.parameters():
-    param.requires_grad = False
+# for param in model.embedding.parameters():
+#     param.requires_grad = False
 
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
@@ -33,14 +37,51 @@ for epoch in range(200):
     loss.backward()
     optimizer.step()
 
-print("final loss:", loss.item())
+# 学習後取得
+final_embedding = model.embedding.weight.data
 
+print("\n=== Embedding Movement ===")
+for idx in range(vocab_size):
+    token = idx_to_char[idx]
+    before = initial_embedding[idx]
+    after = final_embedding[idx]
+    diff = after - before
+    print(f"{token}:")
+    print("  before:", before.numpy())
+    print("  after :", after.numpy())
+    print("  diff  :", diff.numpy())
+    print()
+
+print("\n=== Linear Weights ===")
+print(model.linear.weight.data)
+
+print("\n=== Example: h の内積分解 ===")
+
+# with torch.no_grad():
+#     h_idx = char_to_idx['h']
+#     v = model.embedding.weight.data[h_idx]
+
+#     W = model.linear.weight.data
+
+#     print("embedding(h):", v.numpy())
+#     print()
+
+#     for i in range(vocab_size):
+#         score = torch.dot(v, W[i])
+#         token = idx_to_char[i]
+#         print(f"score_{token} =", score.item())
 with torch.no_grad():
-    test_input = torch.tensor([char_to_idx["h"]])
-    output = model(test_input)
+    e_idx = char_to_idx['e']
+    v = model.embedding.weight.data[e_idx]
 
-    predicted_idx = torch.argmax(output).item()
-    print("Prediction for 'h':", idx_to_char[predicted_idx])
+    W = model.linear.weight.data
 
-    probs = torch.softmax(output, dim=1)
-    print("Probabilities:", probs)
+    print("embedding(e):", v.numpy())
+    print()
+
+    for i in range(vocab_size):
+        score = torch.dot(v, W[i])
+        token = idx_to_char[i]
+        print(f"score_{token} =", score.item())
+
+print("final loss:", loss.item())
