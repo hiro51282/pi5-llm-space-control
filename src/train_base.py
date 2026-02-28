@@ -20,14 +20,18 @@ targets = torch.tensor([char_to_idx[c] for c in text[1:]])
 model = TinyModel(vocab_size, hidden_dim=2)
 
 # 学習前保存
-initial_embedding = copy.deepcopy(model.embedding.weight.data)
+initial_embedding = model.embedding.weight.detach().clone()
 
 # embedding凍結
 # for param in model.embedding.parameters():
 #     param.requires_grad = False
 
+# linear凍結
+for param in model.linear.parameters():
+    param.requires_grad = False
+
 loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+optimizer = torch.optim.Adam(model.embedding.parameters(), lr=0.01)
 
 # --- train ---
 for epoch in range(200):
@@ -36,6 +40,26 @@ for epoch in range(200):
     loss = loss_fn(outputs, targets)
     loss.backward()
     optimizer.step()
+
+    if epoch % 10 == 0:
+        with torch.no_grad():
+            emb = model.embedding.weight.data
+            W = model.linear.weight.data
+
+            print(f"\n=== Epoch {epoch} ===")
+            print("loss:", loss.item())
+
+            print("--- Norms ---")
+            for i, ch in enumerate(vocab):
+                norm = torch.norm(emb[i]).item()
+                print(f"{ch}: {norm:.4f}")
+
+            # cos(h, e方向線路)
+            v = emb[char_to_idx["h"]]
+            w = W[char_to_idx["e"]]
+
+            cos = torch.dot(v, w) / (torch.norm(v) * torch.norm(w))
+            print("cos(h,e):", cos.item())
 
 # 学習後取得
 final_embedding = model.embedding.weight.data
@@ -70,18 +94,35 @@ print("\n=== Example: h の内積分解 ===")
 #         score = torch.dot(v, W[i])
 #         token = idx_to_char[i]
 #         print(f"score_{token} =", score.item())
-with torch.no_grad():
-    e_idx = char_to_idx['e']
-    v = model.embedding.weight.data[e_idx]
 
+# with torch.no_grad():
+#     e_idx = char_to_idx['e']
+#     v = model.embedding.weight.data[e_idx]
+
+#     W = model.linear.weight.data
+
+#     print("embedding(e):", v.numpy())
+#     print()
+
+#     for i in range(vocab_size):
+#         score = torch.dot(v, W[i])
+#         token = idx_to_char[i]
+#         print(f"score_{token} =", score.item())
+
+with torch.no_grad():
+    emb = model.embedding.weight.data
+# ノルム出力追加
+    print("\n--- Norms ---")
+    for i, ch in enumerate(vocab):
+        norm = torch.norm(emb[i]).item()
+        print(f"{ch}: {norm:.4f}")
+# cosθ出力
     W = model.linear.weight.data
 
-    print("embedding(e):", v.numpy())
-    print()
+    v = emb[char_to_idx["h"]]
+    w = W[char_to_idx["e"]]
 
-    for i in range(vocab_size):
-        score = torch.dot(v, W[i])
-        token = idx_to_char[i]
-        print(f"score_{token} =", score.item())
+    cos = torch.dot(v, w) / (torch.norm(v) * torch.norm(w))
+    print("cos(h,e):", cos.item())
 
 print("final loss:", loss.item())
